@@ -1,0 +1,9 @@
+public/main.js
+public/main.js.map
+.bsp/
+.bloop/
+.scala-build/
+.metals/
+.vscode/
+.idea/
+target/
