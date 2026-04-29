@@ -36,10 +36,37 @@ object Logic:
         glVerifying.set(false)
         glUser.set(Some(login))
         if glNamespace.now().trim.isEmpty then glNamespace.set(login)
-        stage.set(Stage.LoadingRepos)
+        beginRepoLoad()
       case Failure(e) =>
         glVerifying.set(false)
         glError.set(Some(humanize(e)))
+    }
+
+  def beginRepoLoad(): Unit =
+    repos.set(Vector.empty)
+    reposLoadProgress.set(0)
+    reposLoadError.set(None)
+    reposCapped.set(false)
+    stage.set(Stage.LoadingRepos)
+    loadNext(1)
+
+  private def loadNext(page: Int): Unit =
+    Api.ghReposPage(ghToken.now(), page).onComplete {
+      case Success(batch) =>
+        val merged = repos.now() ++ batch
+        val capped = merged.size >= Api.MaxRepos
+        val truncated = if capped then merged.take(Api.MaxRepos) else merged
+        repos.set(truncated)
+        reposLoadProgress.set(page)
+        if capped then
+          reposCapped.set(true)
+          stage.set(Stage.Selecting)
+        else if batch.size < Api.PerPage then
+          stage.set(Stage.Selecting)
+        else
+          loadNext(page + 1)
+      case Failure(e) =>
+        reposLoadError.set(Some(humanize(e)))
     }
 
   private def humanize(t: Throwable): String =
