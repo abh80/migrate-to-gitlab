@@ -57,6 +57,7 @@ object Ui:
 
   private def stageView(s: Stage): HtmlElement = s match
     case Stage.LinkGithub => linkGithubPage
+    case Stage.LinkGitlab => linkGitlabPage
     case other =>
       div(cls := "page", div(cls := "page-narrow", stepIndicator(other), p(cls := "muted", other.toString)))
 
@@ -110,6 +111,81 @@ object Ui:
             )
           ),
           child <-- ghError.signal.map {
+            case Some(e) => div(cls := "error", e)
+            case None => emptyNode
+          }
+        )
+      )
+    )
+
+  private def linkGitlabPage: HtmlElement =
+    div(
+      cls := "page",
+      div(
+        cls := "page-narrow",
+        stepIndicator(Stage.LinkGitlab),
+        div(
+          cls := "card",
+          h1(cls := "h1", "Connect GitLab"),
+          p(
+            cls := "muted",
+            "Paste a GitLab Personal Access Token. ",
+            a(
+              href := "https://gitlab.com/-/user_settings/personal_access_tokens?name=migrate-to-gitlab&scopes=api",
+              target := "_blank",
+              rel := "noopener",
+              "Create one →"
+            )
+          ),
+          div(cls := "tiny", "Required scope: ", strong("api"), "."),
+          div(
+            cls := "field",
+            marginTop := "20px",
+            label("GitLab token"),
+            input(
+              tpe := "password",
+              placeholder := "glpat-…",
+              autoComplete := "off",
+              spellCheck := false,
+              controlled(
+                value <-- glToken,
+                onInput.mapToValue --> glToken
+              )
+            )
+          ),
+          div(
+            cls := "field",
+            label("Target namespace (user or group)"),
+            input(
+              tpe := "text",
+              placeholder := "your-gitlab-username",
+              controlled(
+                value <-- glNamespace,
+                onInput.mapToValue --> glNamespace
+              ),
+              onKeyDown.filter(_.key == "Enter") --> (_ => Logic.verifyGitlab())
+            )
+          ),
+          div(
+            display := "flex",
+            justifyContent := "space-between",
+            gap := "8px",
+            button(
+              cls := "btn ghost",
+              "Back",
+              onClick --> (_ => stage.set(Stage.LinkGithub))
+            ),
+            button(
+              cls := "btn",
+              disabled <-- glVerifying.signal,
+              child <-- glVerifying.signal.map(b =>
+                if b then span(div(cls := "spinner"), "Verifying…")
+                else span("Continue")
+              ),
+              onClick --> (_ => Logic.verifyGitlab())
+            )
+          ),
+          child <-- glError.signal.map {
             case Some(e) => div(cls := "error", e)
             case None => emptyNode
           }
