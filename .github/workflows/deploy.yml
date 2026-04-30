@@ -1,0 +1,52 @@
+name: Build and deploy to gh-pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - uses: VirtusLab/scala-cli-setup@main
+
+      - name: Build Scala.js bundle
+        run: scala-cli --power package . --js -o public/main.js -f
+
+      - name: Verify output
+        run: |
+          ls -la public
+          test -s public/main.js
+          test -s public/index.html
+
+      - name: Add SPA 404 fallback
+        run: cp public/index.html public/404.html
+
+      - name: Disable Jekyll
+        run: touch public/.nojekyll
+
+      - name: Deploy to gh-pages
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./public
+          publish_branch: gh-pages
+          force_orphan: true
+          user_name: github-actions[bot]
+          user_email: 41898282+github-actions[bot]@users.noreply.github.com
+          commit_message: "deploy: ${{ github.sha }}"
