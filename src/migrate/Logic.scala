@@ -69,6 +69,24 @@ object Logic:
         reposLoadError.set(Some(humanize(e)))
     }
 
+  def filteredRepos(all: Vector[GhRepo], q: String): Vector[GhRepo] =
+    if q.trim.isEmpty then all
+    else
+      val needle = q.trim.toLowerCase
+      all.filter(r =>
+        r.name.toLowerCase.contains(needle)
+          || r.fullName.toLowerCase.contains(needle)
+          || r.description.exists(_.toLowerCase.contains(needle))
+      )
+
+  def pageSlice(filtered: Vector[GhRepo], pageIdx: Int): Vector[GhRepo] =
+    val start = pageIdx * State.pageSize
+    filtered.slice(start, start + State.pageSize)
+
+  def toggle(repo: GhRepo): Unit =
+    val s = selected.now()
+    selected.set(if s.contains(repo.id) then s - repo.id else s + repo.id)
+
   private def humanize(t: Throwable): String =
     t match
       case e: Api.ApiError => e.getMessage

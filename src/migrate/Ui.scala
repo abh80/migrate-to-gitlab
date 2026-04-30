@@ -58,6 +58,8 @@ object Ui:
   private def stageView(s: Stage): HtmlElement = s match
     case Stage.LinkGithub => linkGithubPage
     case Stage.LinkGitlab => linkGitlabPage
+    case Stage.LoadingRepos => loadingPage
+    case Stage.Selecting => selectorPage
     case other =>
       div(cls := "page", div(cls := "page-narrow", stepIndicator(other), p(cls := "muted", other.toString)))
 
@@ -188,6 +190,142 @@ object Ui:
           child <-- glError.signal.map {
             case Some(e) => div(cls := "error", e)
             case None => emptyNode
+          }
+        )
+      )
+    )
+
+  private def loadingPage: HtmlElement =
+    div(
+      cls := "page",
+      div(
+        cls := "page-narrow",
+        stepIndicator(Stage.LoadingRepos),
+        div(
+          cls := "card",
+          h1(cls := "h1", "Loading repositories"),
+          p(
+            cls := "muted",
+            child.text <-- reposLoadProgress.signal.combineWith(repos.signal).map {
+              case (p, rs) => s"Page $p loaded • ${rs.size} repos so far (cap ${Api.MaxRepos})"
+            }
+          ),
+          div(
+            display := "flex",
+            alignItems := "center",
+            gap := "10px",
+            marginTop := "16px",
+            div(cls := "spinner"),
+            span(cls := "muted", "Fetching from GitHub…")
+          ),
+          child <-- reposLoadError.signal.map {
+            case Some(e) => div(cls := "error", e)
+            case None => emptyNode
+          }
+        )
+      )
+    )
+
+  private def selectorPage: HtmlElement =
+    val filtered = repos.signal.combineWith(filter.signal).map(Logic.filteredRepos.tupled)
+    val visible = filtered.combineWith(pageIndex.signal).map { (f, p) =>
+      val total = f.size
+      val maxPage = if total == 0 then 0 else (total - 1) / pageSize
+      val safe = math.min(p, maxPage)
+      (Logic.pageSlice(f, safe), safe, total, maxPage)
+    }
+
+    div(
+      cls := "page",
+      div(
+        cls := "page-wide",
+        stepIndicator(Stage.Selecting),
+        h1(cls := "h1", "Select repositories"),
+        toolbar(),
+        repoList(visible),
+        pager(visible)
+      )
+    )
+
+  private def toolbar(): HtmlElement =
+    div(
+      cls := "toolbar",
+      input(
+        tpe := "search",
+        placeholder := "Filter by name or description…",
+        controlled(
+          value <-- filter,
+          onInput.mapToValue --> { v =>
+            filter.set(v); pageIndex.set(0)
+          }
+        )
+      ),
+      div(cls := "grow"),
+      div(
+        cls := "tiny tabular",
+        child.text <-- selected.signal.combineWith(repos.signal).map { (s, rs) =>
+          s"${s.size} selected • ${rs.size} total"
+        }
+      )
+    )
+
+  private def repoList(
+      visible: Signal[(Vector[GhRepo], Int, Int, Int)]
+  ): HtmlElement =
+    div(
+      cls := "repo-list",
+      children <-- visible.map { case (vis, _, _, _) =>
+        vis.map(repoRow)
+      }
+    )
+
+  private def repoRow(repo: GhRepo): HtmlElement =
+    div(
+      cls := "repo-row",
+      cls("selected") <-- selected.signal.map(_.contains(repo.id)),
+      onClick --> (_ => Logic.toggle(repo)),
+      div(
+        cls := "cbox",
+        cls("checked") <-- selected.signal.map(_.contains(repo.id))
+      ),
+      div(
+        div(cls := "name", repo.fullName),
+        repo.description match
+          case Some(d) if d.nonEmpty => div(cls := "desc", d)
+          case _ => emptyNode
+      ),
+      div(cls := "tiny tabular", repo.updatedAt.take(10))
+    )
+
+  private def pager(
+      visible: Signal[(Vector[GhRepo], Int, Int, Int)]
+  ): HtmlElement =
+    div(
+      cls := "pager",
+      div(
+        cls := "tiny tabular",
+        child.text <-- visible.map { case (vis, page, total, maxPage) =>
+          if total == 0 then "0 results"
+          else
+            val from = page * pageSize + 1
+            val to = page * pageSize + vis.size
+            s"$from–$to of $total • page ${page + 1}/${maxPage + 1}"
+        }
+      ),
+      div(
+        cls := "ctrls",
+        button(
+          "‹ Prev",
+          disabled <-- pageIndex.signal.map(_ <= 0),
+          onClick --> (_ => pageIndex.update(p => math.max(0, p - 1)))
+        ),
+        button(
+          "Next ›",
+          disabled <-- visible.map { case (_, page, _, maxPage) => page >= maxPage },
+          onClick --> { _ =>
+            visible.observe(unsafeWindowOwner).now() match
+              case (_, _, _, maxPage) =>
+                pageIndex.update(p => math.min(maxPage, p + 1))
           }
         )
       )
