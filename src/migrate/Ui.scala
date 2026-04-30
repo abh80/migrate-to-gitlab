@@ -35,7 +35,7 @@ object Ui:
   private def topbar: HtmlElement =
     div(
       cls := "topbar",
-      div(cls := "brand", "migrate-to-gitlab"),
+      div(cls := "brand", "Migrate to Gitlab"),
       div(
         cls := "topbar-right",
         saveTokenToggle,
@@ -275,6 +275,13 @@ object Ui:
             case Some(e) => div(cls := "error", e)
             case None => emptyNode
           }
+        ),
+        div(
+          cls := "disclaimer",
+          span(cls := "shield", "🔒"),
+          span(
+            "This app runs entirely in your browser. Tokens are never sent to any server; only directly to GitHub and GitLab APIs. Anything saved stays in this browser's localStorage, encrypted with your password. Feel free to check the network tab."
+          )
         )
       )
     )
