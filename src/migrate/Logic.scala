@@ -10,6 +10,8 @@ object Logic:
   given ExecutionContext = scala.scalajs.concurrent.JSExecutionContext.queue
   import State.*
 
+  // ---------- Verification ----------
+
   def verifyGithub(): Unit =
     val t = ghToken.now().trim
     if t.isEmpty then
@@ -43,6 +45,8 @@ object Logic:
         glError.set(Some(humanize(e)))
     }
 
+  // ---------- Repo loading ----------
+
   def beginRepoLoad(): Unit =
     repos.set(Vector.empty)
     reposLoadProgress.set(0)
@@ -70,6 +74,8 @@ object Logic:
         reposLoadError.set(Some(humanize(e)))
     }
 
+  // ---------- Filter / paging ----------
+
   def filteredRepos(all: Vector[GhRepo], q: String): Vector[GhRepo] =
     if q.trim.isEmpty then all
     else
@@ -83,6 +89,8 @@ object Logic:
   def pageSlice(filtered: Vector[GhRepo], pageIdx: Int): Vector[GhRepo] =
     val start = pageIdx * State.pageSize
     filtered.slice(start, start + State.pageSize)
+
+  // ---------- Selection ----------
 
   def toggle(repo: GhRepo): Unit =
     val s = selected.now()
@@ -100,11 +108,14 @@ object Logic:
     val allSelected = ids.nonEmpty && ids.subsetOf(s)
     selected.set(if allSelected then s -- ids else s ++ ids)
 
+  // ---------- Import driver ----------
+
   def beginImport(): Unit =
     val chosen = repos.now().filter(r => selected.now().contains(r.id))
     if chosen.isEmpty then return
     jobs.set(chosen.map(r => r.id -> ImportJob(r, ImportPhase.Pending, None)).toMap)
     stage.set(Stage.Importing)
+    // queue in batches of 10
     val batches = chosen.grouped(10).toVector
     runBatches(batches, 0)
 
@@ -115,6 +126,7 @@ object Logic:
     val batch = batches(idx)
     val futs = batch.map(triggerOne)
     Future.sequence(futs).foreach { _ =>
+      // small delay between batches via setTimeout
       dom.window.setTimeout(() => runBatches(batches, idx + 1), 1500)
     }
 
@@ -129,14 +141,41 @@ object Logic:
         repo.name
       )
       .map { resp =>
+        val pid = resp.obj.get("id").map(_.num.toLong)
         val path = resp.obj.get("full_path").map(_.str)
         updateJob(repo.id, j => j.copy(gitlabPath = path))
-        ()
+        pid.foreach(pollProject(repo.id, _))
       }
       .recover { case e: Throwable =>
         updateJob(repo.id, _.copy(phase = ImportPhase.Failed(humanize(e))))
         ()
       }
+
+  private def pollProject(repoId: Long, projectId: Long, attempt: Int = 0): Unit =
+    val delay = math.min(60000, 5000 * math.pow(1.4, attempt.toDouble).toInt)
+    dom.window.setTimeout(
+      () =>
+        Api.glProjectStatus(glToken.now(), projectId).onComplete {
+          case Success(("finished", _)) =>
+            updateJob(repoId, _.copy(phase = ImportPhase.Finished))
+            checkAllDone()
+          case Success(("failed", err)) =>
+            updateJob(
+              repoId,
+              _.copy(phase = ImportPhase.Failed(err.getOrElse("import failed")))
+            )
+            checkAllDone()
+          case Success((_, _)) =>
+            pollProject(repoId, projectId, attempt + 1)
+          case Failure(e) =>
+            // transient — retry a few times
+            if attempt < 8 then pollProject(repoId, projectId, attempt + 1)
+            else
+              updateJob(repoId, _.copy(phase = ImportPhase.Failed(humanize(e))))
+              checkAllDone()
+        },
+      delay.toDouble
+    )
 
   private def updateJob(id: Long, f: ImportJob => ImportJob): Unit =
     jobs.update(m => m.get(id).fold(m)(j => m.updated(id, f(j))))
@@ -149,6 +188,8 @@ object Logic:
       case _ => false
     }
     if done && all.nonEmpty then stage.set(Stage.Done)
+
+  // ---------- Helpers ----------
 
   private def humanize(t: Throwable): String =
     t match
