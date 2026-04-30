@@ -33,3 +33,18 @@ object State:
   val existing: Var[Set[Long]] = Var(Set.empty)
   val collisionsChecked: Var[Int] = Var(0)
   val collisionsTotal: Var[Int] = Var(0)
+
+  val storageKey: String = "user-key"
+
+  val saveTokens: Var[Boolean] = Var(false)
+
+  val unlockNeeded: Var[Boolean] = Var(false)
+  val unlockPassword: Var[String] = Var("")
+  val unlockError: Var[Option[String]] = Var(None)
+  val unlockBusy: Var[Boolean] = Var(false)
+
+  val saveDialogOpen: Var[Boolean] = Var(false)
+  val savePassword: Var[String] = Var("")
+  val savePasswordConfirm: Var[String] = Var("")
+  val saveError: Var[Option[String]] = Var(None)
+  val saveBusy: Var[Boolean] = Var(false)

@@ -266,3 +266,59 @@ a:hover { text-decoration: underline; }
 /* fade in stage */
 .stage-enter { animation: fade-up 200ms ease-out both; }
 @keyframes fade-up { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+
+/* ------- topbar right + toggle ------- */
+.topbar-right { display: flex; align-items: center; gap: 16px; }
+.toggle { display: inline-flex; align-items: center; gap: 8px; cursor: pointer; user-select: none; position: relative; }
+.toggle input { position: absolute; opacity: 0; pointer-events: none; }
+.toggle-track {
+  width: 32px; height: 18px;
+  background: var(--border-default);
+  border-radius: 999px;
+  position: relative;
+  transition: background 150ms ease-out;
+  display: inline-block;
+}
+.toggle-thumb {
+  position: absolute; top: 2px; left: 2px;
+  width: 14px; height: 14px;
+  background: #fff;
+  border-radius: 999px;
+  box-shadow: var(--shadow-sm);
+  transition: transform 180ms ease-out;
+  display: inline-block;
+}
+.toggle-track.on { background: var(--accent); }
+.toggle-track.on .toggle-thumb { transform: translateX(14px); }
+.toggle:focus-visible .toggle-track { box-shadow: 0 0 0 3px var(--accent-soft); outline: none; }
+.toggle:focus { outline: none; }
+.toggle-label { font-size: 12px; font-weight: 500; color: var(--text-secondary); }
+
+/* ------- modal ------- */
+.modal-backdrop {
+  position: fixed; inset: 0;
+  background: rgba(20, 20, 20, 0.42);
+  display: flex; align-items: center; justify-content: center;
+  z-index: 100;
+  padding: 24px;
+  animation: fade-in 150ms ease-out;
+}
+@keyframes fade-in { from { opacity: 0; } to { opacity: 1; } }
+.modal {
+  background: var(--surface-base);
+  border: 1px solid var(--border-default);
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow-md);
+  padding: 28px;
+  width: 100%;
+  max-width: 440px;
+  animation: modal-in 200ms ease-out;
+}
+@keyframes modal-in {
+  from { opacity: 0; transform: translateY(8px) scale(0.98); }
+  to { opacity: 1; transform: none; }
+}
+.modal-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 20px; }
+@media (prefers-reduced-motion: reduce) {
+  .modal-backdrop, .modal { animation: none; }
+}

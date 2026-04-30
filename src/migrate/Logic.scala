@@ -10,6 +10,119 @@ object Logic:
   given ExecutionContext = scala.scalajs.concurrent.JSExecutionContext.queue
   import State.*
 
+  // ---------- Init / persistence ----------
+
+  def init(): Unit =
+    val storage = dom.window.localStorage
+    Option(storage.getItem(storageKey)) match
+      case Some(_) => unlockNeeded.set(true)
+      case None => ()
+
+  def tryUnlock(): Unit =
+    val pw = unlockPassword.now()
+    if pw.isEmpty then
+      unlockError.set(Some("Password required."))
+      return
+    val storage = dom.window.localStorage
+    Option(storage.getItem(storageKey)) match
+      case None =>
+        unlockNeeded.set(false)
+      case Some(blob) =>
+        unlockBusy.set(true); unlockError.set(None)
+        Crypto.decrypt(pw, blob).onComplete {
+          case Success(json) =>
+            unlockBusy.set(false)
+            try
+              val parsed = js.JSON.parse(json)
+              ghToken.set(parsed.gh.asInstanceOf[String])
+              glToken.set(parsed.gl.asInstanceOf[String])
+              glNamespace.set(parsed.ns.asInstanceOf[String])
+              unlockPassword.set("")
+              unlockNeeded.set(false)
+              chainVerify()
+            catch
+              case _: Throwable =>
+                unlockError.set(Some("Stored data unreadable. Use Start fresh."))
+          case Failure(_) =>
+            unlockBusy.set(false)
+            unlockError.set(Some("Wrong password."))
+        }
+
+  def startFresh(): Unit =
+    dom.window.localStorage.removeItem(storageKey)
+    unlockPassword.set("")
+    unlockError.set(None)
+    unlockBusy.set(false)
+    unlockNeeded.set(false)
+
+  private def chainVerify(): Unit =
+    ghVerifying.set(true)
+    Api.ghVerify(ghToken.now()).onComplete {
+      case Success(login) =>
+        ghVerifying.set(false)
+        ghUser.set(Some(login))
+        glVerifying.set(true)
+        Api.glVerify(glToken.now()).onComplete {
+          case Success(glLogin) =>
+            glVerifying.set(false)
+            glUser.set(Some(glLogin))
+            if glNamespace.now().trim.isEmpty then glNamespace.set(glLogin)
+            beginRepoLoad()
+          case Failure(e) =>
+            glVerifying.set(false)
+            glError.set(Some(humanize(e)))
+            stage.set(Stage.LinkGitlab)
+        }
+      case Failure(e) =>
+        ghVerifying.set(false)
+        ghError.set(Some(humanize(e)))
+        stage.set(Stage.LinkGithub)
+    }
+
+  def openSaveDialog(): Unit =
+    savePassword.set("")
+    savePasswordConfirm.set("")
+    saveError.set(None)
+    saveDialogOpen.set(true)
+
+  def cancelSave(): Unit =
+    saveDialogOpen.set(false)
+    beginRepoLoad()
+
+  def confirmSave(): Unit =
+    val p = savePassword.now()
+    val c = savePasswordConfirm.now()
+    if p.length < 6 then
+      saveError.set(Some("Password must be at least 6 characters."))
+      return
+    if p != c then
+      saveError.set(Some("Passwords do not match."))
+      return
+    saveBusy.set(true); saveError.set(None)
+    val payload = js.JSON.stringify(
+      js.Dynamic.literal(
+        gh = ghToken.now(),
+        gl = glToken.now(),
+        ns = glNamespace.now()
+      )
+    )
+    Crypto.encrypt(p, payload).onComplete {
+      case Success(blob) =>
+        dom.window.localStorage.setItem(storageKey, blob)
+        saveBusy.set(false)
+        saveDialogOpen.set(false)
+        savePassword.set("")
+        savePasswordConfirm.set("")
+        beginRepoLoad()
+      case Failure(e) =>
+        saveBusy.set(false)
+        saveError.set(Some(humanize(e)))
+    }
+
+  def onSaveToggleChanged(enabled: Boolean): Unit =
+    saveTokens.set(enabled)
+    if !enabled then dom.window.localStorage.removeItem(storageKey)
+
   // ---------- Verification ----------
 
   def verifyGithub(): Unit =
@@ -39,7 +152,8 @@ object Logic:
         glVerifying.set(false)
         glUser.set(Some(login))
         if glNamespace.now().trim.isEmpty then glNamespace.set(login)
-        beginRepoLoad()
+        if saveTokens.now() then openSaveDialog()
+        else beginRepoLoad()
       case Failure(e) =>
         glVerifying.set(false)
         glError.set(Some(humanize(e)))

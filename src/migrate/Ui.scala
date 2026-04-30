@@ -11,7 +11,9 @@ object Ui:
       cls := "app-shell",
       topbar,
       child <-- stage.signal.map(stageView),
-      footer
+      footer,
+      child <-- unlockNeeded.signal.map(b => if b then unlockModal else emptyNode),
+      child <-- saveDialogOpen.signal.map(b => if b then saveModal else emptyNode)
     )
 
   private def footer: HtmlElement =
@@ -34,10 +36,140 @@ object Ui:
     div(
       cls := "topbar",
       div(cls := "brand", "migrate-to-gitlab"),
-      child <-- ghUser.signal.map {
-        case Some(u) => div(cls := "tiny", s"gh: $u")
-        case None => emptyNode
-      }
+      div(
+        cls := "topbar-right",
+        saveTokenToggle,
+        child <-- ghUser.signal.map {
+          case Some(u) => div(cls := "tiny", s"gh: $u")
+          case None => emptyNode
+        }
+      )
+    )
+
+  private def saveTokenToggle: HtmlElement =
+    div(
+      cls := "toggle",
+      role := "switch",
+      tabIndex := 0,
+      title := "Encrypt and store tokens in this browser. Asks for a password.",
+      aria.checked <-- saveTokens.signal.map(_.toString),
+      onClick --> { _ => Logic.onSaveToggleChanged(!saveTokens.now()) },
+      onKeyDown.filter(e => e.key == " " || e.key == "Enter") --> { e =>
+        e.preventDefault()
+        Logic.onSaveToggleChanged(!saveTokens.now())
+      },
+      span(
+        cls := "toggle-track",
+        cls("on") <-- saveTokens.signal,
+        span(cls := "toggle-thumb")
+      ),
+      span(cls := "toggle-label", "Save tokens")
+    )
+
+  private def unlockModal: HtmlElement =
+    div(
+      cls := "modal-backdrop",
+      div(
+        cls := "modal",
+        h2(cls := "h2", "Unlock saved tokens"),
+        p(cls := "muted", "Encrypted tokens are stored in this browser. Enter your password to decrypt, or start fresh to delete them."),
+        div(
+          cls := "field",
+          marginTop := "16px",
+          label("Password"),
+          input(
+            tpe := "password",
+            autoComplete := "current-password",
+            spellCheck := false,
+            controlled(
+              value <-- unlockPassword,
+              onInput.mapToValue --> unlockPassword
+            ),
+            onKeyDown.filter(_.key == "Enter") --> (_ => Logic.tryUnlock())
+          )
+        ),
+        child <-- unlockError.signal.map {
+          case Some(e) => div(cls := "error", e)
+          case None => emptyNode
+        },
+        div(
+          cls := "modal-actions",
+          button(
+            cls := "btn ghost",
+            "Start fresh",
+            onClick --> (_ => Logic.startFresh())
+          ),
+          button(
+            cls := "btn",
+            disabled <-- unlockBusy.signal,
+            child <-- unlockBusy.signal.map(b =>
+              if b then span(div(cls := "spinner"), "Unlocking…")
+              else span("Unlock")
+            ),
+            onClick --> (_ => Logic.tryUnlock())
+          )
+        )
+      )
+    )
+
+  private def saveModal: HtmlElement =
+    div(
+      cls := "modal-backdrop",
+      div(
+        cls := "modal",
+        h2(cls := "h2", "Encrypt and save tokens"),
+        p(cls := "muted", "Choose a password. Tokens are encrypted with AES-GCM and a PBKDF2-derived key (200k iterations). The password is never stored."),
+        div(
+          cls := "field",
+          marginTop := "16px",
+          label("Password (min 6 chars)"),
+          input(
+            tpe := "password",
+            autoComplete := "new-password",
+            spellCheck := false,
+            controlled(
+              value <-- savePassword,
+              onInput.mapToValue --> savePassword
+            )
+          )
+        ),
+        div(
+          cls := "field",
+          label("Confirm password"),
+          input(
+            tpe := "password",
+            autoComplete := "new-password",
+            spellCheck := false,
+            controlled(
+              value <-- savePasswordConfirm,
+              onInput.mapToValue --> savePasswordConfirm
+            ),
+            onKeyDown.filter(_.key == "Enter") --> (_ => Logic.confirmSave())
+          )
+        ),
+        child <-- saveError.signal.map {
+          case Some(e) => div(cls := "error", e)
+          case None => emptyNode
+        },
+        div(
+          cls := "modal-actions",
+          button(
+            cls := "btn ghost",
+            "Skip",
+            disabled <-- saveBusy.signal,
+            onClick --> (_ => Logic.cancelSave())
+          ),
+          button(
+            cls := "btn",
+            disabled <-- saveBusy.signal,
+            child <-- saveBusy.signal.map(b =>
+              if b then span(div(cls := "spinner"), "Encrypting…")
+              else span("Save and continue")
+            ),
+            onClick --> (_ => Logic.confirmSave())
+          )
+        )
+      )
     )
 
   private val stepDefs: Vector[(String, Set[Stage])] = Vector(
