@@ -15,7 +15,9 @@ object Logic:
   def init(): Unit =
     val storage = dom.window.localStorage
     Option(storage.getItem(storageKey)) match
-      case Some(_) => unlockNeeded.set(true)
+      case Some(_) =>
+        saveTokens.set(true)
+        unlockNeeded.set(true)
       case None => ()
 
   def tryUnlock(): Unit =
@@ -50,6 +52,7 @@ object Logic:
 
   def startFresh(): Unit =
     dom.window.localStorage.removeItem(storageKey)
+    saveTokens.set(false)
     unlockPassword.set("")
     unlockError.set(None)
     unlockBusy.set(false)
