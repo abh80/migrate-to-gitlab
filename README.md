@@ -1,4 +1,5 @@
 # Migrate to Gitlab (from GitHub pages? yes!)
+🚀 See https://abh80.is-a.dev/migrate-to-gitlab/
 
 GitHub used to be the place. For a lot of us it still is: first commit, first job, the platform we grew up on. But it's been getting flakier, and the trust hasn't really survived it. Outages that used to be rare hit most weeks now. Merges get reverted with nobody saying anything. RCEs have shipped. And there's no CEO to call about it, which means in practice nobody really owns the failures.
 
