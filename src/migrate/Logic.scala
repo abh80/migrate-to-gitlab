@@ -87,6 +87,20 @@ object Logic:
     val s = selected.now()
     selected.set(if s.contains(repo.id) then s - repo.id else s + repo.id)
 
+  def shiftRange(visible: Vector[GhRepo], from: Int, to: Int, mark: Boolean): Unit =
+    val (lo, hi) = (math.min(from, to), math.max(from, to))
+    val ids = visible.slice(lo, hi + 1).map(_.id).toSet
+    val s = selected.now()
+    selected.set(if mark then s ++ ids else s -- ids)
+
+  def toggleAllOnPage(visible: Vector[GhRepo]): Unit =
+    val ids = visible.map(_.id).toSet
+    val s = selected.now()
+    val allSelected = ids.nonEmpty && ids.subsetOf(s)
+    selected.set(if allSelected then s -- ids else s ++ ids)
+
+  def beginImport(): Unit = stage.set(Stage.Importing)
+
   private def humanize(t: Throwable): String =
     t match
       case e: Api.ApiError => e.getMessage

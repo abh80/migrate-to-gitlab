@@ -240,23 +240,51 @@ object Ui:
       div(
         cls := "page-wide",
         stepIndicator(Stage.Selecting),
-        h1(cls := "h1", "Select repositories"),
-        toolbar(),
+        div(
+          display := "flex",
+          alignItems := "baseline",
+          justifyContent := "space-between",
+          marginBottom := "12px",
+          h1(cls := "h1", "Select repositories"),
+          child <-- reposCapped.signal.map {
+            case true => span(cls := "pill err", div(cls := "dot"), s"capped at ${Api.MaxRepos}")
+            case false => emptyNode
+          }
+        ),
+        toolbar(visible),
         repoList(visible),
         pager(visible)
       )
     )
 
-  private def toolbar(): HtmlElement =
+  private def toolbar(
+      visible: Signal[(Vector[GhRepo], Int, Int, Int)]
+  ): HtmlElement =
     div(
       cls := "toolbar",
+      div(
+        cls := "cbox",
+        cls("checked") <-- visible.combineWith(selected.signal).map {
+          case (vis, _, _, _, s) => vis.nonEmpty && vis.forall(r => s.contains(r.id))
+        },
+        cls("indet") <-- visible.combineWith(selected.signal).map {
+          case (vis, _, _, _, s) =>
+            val anySel = vis.exists(r => s.contains(r.id))
+            val allSel = vis.nonEmpty && vis.forall(r => s.contains(r.id))
+            anySel && !allSel
+        },
+        onClick --> { _ =>
+          visible.observe(unsafeWindowOwner).now() match
+            case (vis, _, _, _) => Logic.toggleAllOnPage(vis)
+        }
+      ),
       input(
         tpe := "search",
         placeholder := "Filter by name or description…",
         controlled(
           value <-- filter,
           onInput.mapToValue --> { v =>
-            filter.set(v); pageIndex.set(0)
+            filter.set(v); pageIndex.set(0); lastClickedIndex.set(None)
           }
         )
       ),
@@ -266,6 +294,27 @@ object Ui:
         child.text <-- selected.signal.combineWith(repos.signal).map { (s, rs) =>
           s"${s.size} selected • ${rs.size} total"
         }
+      ),
+      button(
+        cls := "btn ghost sm",
+        "Select all (filtered)",
+        onClick --> { _ =>
+          val q = filter.now()
+          val ids = Logic.filteredRepos(repos.now(), q).map(_.id).toSet
+          selected.update(_ ++ ids)
+        }
+      ),
+      button(
+        cls := "btn ghost sm",
+        "Clear",
+        disabled <-- selected.signal.map(_.isEmpty),
+        onClick --> (_ => selected.set(Set.empty))
+      ),
+      button(
+        cls := "btn",
+        disabled <-- selected.signal.map(_.isEmpty),
+        child.text <-- selected.signal.map(s => s"Import ${s.size}"),
+        onClick --> (_ => Logic.beginImport())
       )
     )
 
@@ -275,24 +324,46 @@ object Ui:
     div(
       cls := "repo-list",
       children <-- visible.map { case (vis, _, _, _) =>
-        vis.map(repoRow)
+        vis.zipWithIndex.map { (r, i) => repoRow(r, i, vis) }
       }
     )
 
-  private def repoRow(repo: GhRepo): HtmlElement =
+  private def repoRow(repo: GhRepo, idx: Int, visible: Vector[GhRepo]): HtmlElement =
     div(
       cls := "repo-row",
       cls("selected") <-- selected.signal.map(_.contains(repo.id)),
-      onClick --> (_ => Logic.toggle(repo)),
+      onClick --> { ev =>
+        if ev.shiftKey then
+          lastClickedIndex.now() match
+            case Some(prev) =>
+              val mark = !selected.now().contains(repo.id)
+              Logic.shiftRange(visible, prev, idx, mark)
+            case None =>
+              Logic.toggle(repo)
+        else
+          Logic.toggle(repo)
+        lastClickedIndex.set(Some(idx))
+      },
       div(
         cls := "cbox",
         cls("checked") <-- selected.signal.map(_.contains(repo.id))
       ),
       div(
-        div(cls := "name", repo.fullName),
+        div(
+          cls := "name",
+          repo.fullName,
+          if repo.isPrivate then span(cls := "pill", marginLeft := "8px", "private")
+          else emptyNode,
+          if repo.archived then span(cls := "pill", marginLeft := "6px", "archived")
+          else emptyNode
+        ),
         repo.description match
           case Some(d) if d.nonEmpty => div(cls := "desc", d)
           case _ => emptyNode
+      ),
+      div(
+        cls := "meta tiny tabular",
+        if repo.stars > 0 then span("★ ", repo.stars.toString) else emptyNode
       ),
       div(cls := "tiny tabular", repo.updatedAt.take(10))
     )
