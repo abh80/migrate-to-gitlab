@@ -66,8 +66,10 @@ object Logic:
         if capped then
           reposCapped.set(true)
           stage.set(Stage.Selecting)
+          checkCollisions()
         else if batch.size < Api.PerPage then
           stage.set(Stage.Selecting)
+          checkCollisions()
         else
           loadNext(page + 1)
       case Failure(e) =>
@@ -90,20 +92,48 @@ object Logic:
     val start = pageIdx * State.pageSize
     filtered.slice(start, start + State.pageSize)
 
+  // ---------- Collision detection ----------
+
+  def checkCollisions(): Unit =
+    val ns = glNamespace.now().trim
+    val all = repos.now()
+    if ns.isEmpty || all.isEmpty then return
+    existing.set(Set.empty)
+    collisionsChecked.set(0)
+    collisionsTotal.set(all.size)
+    val concurrency = 6
+    val queue = scala.collection.mutable.Queue.from(all)
+    def worker(): Unit =
+      if queue.isEmpty then return
+      val r = queue.dequeue()
+      Api
+        .glProjectExists(glToken.now(), s"$ns/${r.name}")
+        .recover { case _ => false }
+        .foreach { exists =>
+          if exists then existing.update(_ + r.id)
+          collisionsChecked.update(_ + 1)
+          worker()
+        }
+    (1 to math.min(concurrency, all.size)).foreach(_ => worker())
+
   // ---------- Selection ----------
 
   def toggle(repo: GhRepo): Unit =
+    if existing.now().contains(repo.id) then return
     val s = selected.now()
     selected.set(if s.contains(repo.id) then s - repo.id else s + repo.id)
 
   def shiftRange(visible: Vector[GhRepo], from: Int, to: Int, mark: Boolean): Unit =
     val (lo, hi) = (math.min(from, to), math.max(from, to))
-    val ids = visible.slice(lo, hi + 1).map(_.id).toSet
+    val blocked = existing.now()
+    val ids = visible.slice(lo, hi + 1).map(_.id).toSet -- blocked
     val s = selected.now()
     selected.set(if mark then s ++ ids else s -- ids)
 
   def toggleAllOnPage(visible: Vector[GhRepo]): Unit =
-    val ids = visible.map(_.id).toSet
+    val blocked = existing.now()
+    val selectable = visible.filterNot(r => blocked.contains(r.id))
+    val ids = selectable.map(_.id).toSet
     val s = selected.now()
     val allSelected = ids.nonEmpty && ids.subsetOf(s)
     selected.set(if allSelected then s -- ids else s ++ ids)

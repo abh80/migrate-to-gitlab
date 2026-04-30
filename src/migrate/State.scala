@@ -29,3 +29,7 @@ object State:
   val lastClickedIndex: Var[Option[Int]] = Var(None)
 
   val jobs: Var[Map[Long, ImportJob]] = Var(Map.empty)
+
+  val existing: Var[Set[Long]] = Var(Set.empty)
+  val collisionsChecked: Var[Int] = Var(0)
+  val collisionsTotal: Var[Int] = Var(0)

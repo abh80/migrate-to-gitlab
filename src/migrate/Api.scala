@@ -100,6 +100,19 @@ object Api:
       body = Some(ujson.write(body))
     ).map { case (j, _) => j }
 
+  def glProjectExists(token: String, namespacePath: String): Future[Boolean] =
+    val encoded = js.URIUtils.encodeURIComponent(namespacePath)
+    val init = new dom.RequestInit {}
+    init.method = dom.HttpMethod.GET
+    val h = new dom.Headers()
+    glHeaders(token).foreach((k, v) => h.append(k, v))
+    init.headers = h
+    dom.fetch(s"$GlBase/projects/$encoded", init).toFuture.map { resp =>
+      if resp.ok then true
+      else if resp.status == 404 then false
+      else throw ApiError(resp.status, s"gitlab status ${resp.status}")
+    }
+
   def glProjectStatus(glToken: String, projectId: Long): Future[(String, Option[String])] =
     req(s"$GlBase/projects/$projectId", glHeaders(glToken)).map { case (j, _) =>
       val st = j.obj.get("import_status").map(_.str).getOrElse("unknown")

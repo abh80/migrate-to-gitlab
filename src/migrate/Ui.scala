@@ -322,6 +322,18 @@ object Ui:
         )
       ),
       div(cls := "grow"),
+      child <-- collisionsChecked.signal.combineWith(collisionsTotal.signal, existing.signal).map {
+        case (done, total, ex) =>
+          if total > 0 && done < total then
+            span(
+              cls := "pill run",
+              div(cls := "spinner"),
+              s"checking gitlab… $done/$total"
+            )
+          else if ex.nonEmpty then
+            span(cls := "pill err", div(cls := "dot"), s"${ex.size} already on gitlab")
+          else emptyNode
+      },
       div(
         cls := "tiny tabular",
         child.text <-- selected.signal.combineWith(repos.signal).map { (s, rs) =>
@@ -365,20 +377,24 @@ object Ui:
     )
 
   private def repoRow(repo: GhRepo, idx: Int, visible: Vector[GhRepo]): HtmlElement =
+    val isExisting = existing.signal.map(_.contains(repo.id))
     div(
       cls := "repo-row",
       cls("selected") <-- selected.signal.map(_.contains(repo.id)),
+      cls("collision") <-- isExisting,
       onClick --> { ev =>
-        if ev.shiftKey then
-          lastClickedIndex.now() match
-            case Some(prev) =>
-              val mark = !selected.now().contains(repo.id)
-              Logic.shiftRange(visible, prev, idx, mark)
-            case None =>
-              Logic.toggle(repo)
+        if existing.now().contains(repo.id) then ()
         else
-          Logic.toggle(repo)
-        lastClickedIndex.set(Some(idx))
+          if ev.shiftKey then
+            lastClickedIndex.now() match
+              case Some(prev) =>
+                val mark = !selected.now().contains(repo.id)
+                Logic.shiftRange(visible, prev, idx, mark)
+              case None =>
+                Logic.toggle(repo)
+          else
+            Logic.toggle(repo)
+          lastClickedIndex.set(Some(idx))
       },
       div(
         cls := "cbox",
@@ -391,7 +407,20 @@ object Ui:
           if repo.isPrivate then span(cls := "pill", marginLeft := "8px", "private")
           else emptyNode,
           if repo.archived then span(cls := "pill", marginLeft := "6px", "archived")
-          else emptyNode
+          else emptyNode,
+          child <-- isExisting.combineWith(glNamespace.signal).map { (yes, ns) =>
+            if yes then
+              span(
+                cls := "tip",
+                marginLeft := "6px",
+                span(cls := "pill err", div(cls := "dot"), "exists in gitlab"),
+                span(
+                  cls := "tip-content",
+                  s"Already at gitlab.com/$ns/${repo.name}. Delete it on GitLab first to enable import."
+                )
+              )
+            else emptyNode
+          }
         ),
         repo.description match
           case Some(d) if d.nonEmpty => div(cls := "desc", d)
