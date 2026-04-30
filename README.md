@@ -12,6 +12,15 @@ I present you this browser native tool (completely?...why would I lie to you?) t
 
 > AI has been used to make refactors such as my skill for scala code optimizer: https://github.com/abh80/skills and UI generation tasks, which was bad; so I fixed some of it.
 
+## Why bother
+
+Moving a 15-year codebase off the place you've been hosting it on is already a pain. Add "now go write a script that pages through the GitHub API and POSTs to GitLab and polls each import" and most people just don't. GitLab already does the most of hardwork, I just built the cherry on top.....Sweet.
+
+If GitHub eventually fixes its problems, gets some accountability, stops the silent reverts and so on, then I will personally make a reverse tool of this. Until then good luck to the bros at Microsoft.
+
+---
+> For the nerds, you don't wanna read from now on. Everything from this point onwards is what we call as Slop. AI SLOP.
+
 ## What it does
 
 GitLab ships an excellent [Import from GitHub API](https://docs.gitlab.com/api/import/#import-repository-from-github). You hand GitLab your GitHub PAT and a repo id, and **GitLab's servers do the pull themselves**: full git history, branches, tags, issues, PRs (as MRs), milestones, wikis, releases. You don't have to clone anything locally, which means no disk space and no proxy on your end.
@@ -78,7 +87,7 @@ Full git history, all branches and tags, issues + labels, PRs → MRs, milestone
 
 ## Known limits and gotchas
 
-- **Cap**: 4500 repos. If you have more, narrow with the org-only flow (run it twice, once per org).
+- **Cap**: 4500 repos. If you have more, do it again (run it twice, who cares?) Github had some sort of ratelimit like 5k requestions every hour.
 - **`repo_id`** sent to GitLab has to be the numeric GitHub repo id, which the app handles for you.
 - **Target namespace** has to already exist on GitLab. Your username always does; for groups, create them on GitLab first.
 - **Same-name collisions** get caught up front. The row is tagged "exists in gitlab" with a hover tooltip and disabled. Delete the existing GitLab project first if you want to re-import.
@@ -101,11 +110,7 @@ src/migrate/Crypto.scala WebCrypto wrapper for save-tokens flow
 src/migrate/Ui.scala     Laminar views
 ```
 
-## Why bother
 
-Moving a 15-year codebase off the place you've been hosting it on is already a pain. Add "now go write a script that pages through the GitHub API and POSTs to GitLab and polls each import" and most people just don't. GitLab already does the most of hardwork, I just built the cherry on top.....Sweet.
-
-If GitHub eventually fixes its problems, gets some accountability, stops the silent reverts and so on, then I will personally make a reverse tool of this....................... Until then good luck to the bros at Microsoft.
 
 ---
 made with ❤ by [abh80](https://github.com/abh80)
