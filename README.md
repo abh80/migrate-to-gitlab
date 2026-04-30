@@ -22,7 +22,9 @@ If GitHub eventually fixes its problems, gets some accountability, stops the sil
 
 ## Preview
 
-## !\[preview.png](./meta/preview.png)
+![preview.png](./meta/preview.png)
+
+---
 
 > For the nerds, you don't wanna read from now on. Everything from this point onwards is what we call as Slop. AI SLOP.
 
