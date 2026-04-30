@@ -1,4 +1,5 @@
 # Migrate to Gitlab (from GitHub pages? yes!)
+
 🚀 See https://abh80.is-a.dev/migrate-to-gitlab/
 
 GitHub used to be the place. For a lot of us it still is: first commit, first job, the platform we grew up on. But it's been getting flakier, and the trust hasn't really survived it. Outages that used to be rare hit most weeks now. Merges get reverted with nobody saying anything. RCEs have shipped. And there's no CEO to call about it, which means in practice nobody really owns the failures.
@@ -19,7 +20,10 @@ Moving a 15-year codebase off the place you've been hosting it on is already a p
 
 If GitHub eventually fixes its problems, gets some accountability, stops the silent reverts and so on, then I will personally make a reverse tool of this. Until then good luck to the bros at Microsoft.
 
----
+## Preview
+
+## !\[preview.png](./meta/preview.png)
+
 > For the nerds, you don't wanna read from now on. Everything from this point onwards is what we call as Slop. AI SLOP.
 
 ## What it does
@@ -43,11 +47,11 @@ If you turn on **Save tokens** in the top bar, the GitHub PAT, GitLab PAT and na
 
 ## Tech
 
-- **Scala 3.5 / Scala.js**, pure client app, no server runtime
-- **Laminar 17**, reactive UI with fine-grained reactivity via `Var`/`Signal`
-- **upickle** for JSON
-- **WebCrypto SubtleCrypto** for the encrypt-tokens flow
-- Direct `fetch` to GitHub REST and GitLab v4 (both expose CORS for the endpoints used)
+* **Scala 3.5 / Scala.js**, pure client app, no server runtime
+* **Laminar 17**, reactive UI with fine-grained reactivity via `Var`/`Signal`
+* **upickle** for JSON
+* **WebCrypto SubtleCrypto** for the encrypt-tokens flow
+* Direct `fetch` to GitHub REST and GitLab v4 (both expose CORS for the endpoints used)
 
 The frontend is small enough to read in one sitting: `Models`, `State`, `Api`, `Logic`, `Ui`, `Crypto`, `Main`. Adding a feature usually means editing two files.
 
@@ -79,8 +83,8 @@ Open `http://localhost:8080`.
 
 ## PAT scopes
 
-- **GitHub**: `repo` (full, required so GitLab can pull private repos), `read:org` (to list org-owned repos)
-- **GitLab**: `api` (full)
+* **GitHub**: `repo` (full, required so GitLab can pull private repos), `read:org` (to list org-owned repos)
+* **GitLab**: `api` (full)
 
 ## What gets migrated (by GitLab, free)
 
@@ -88,12 +92,12 @@ Full git history, all branches and tags, issues + labels, PRs → MRs, milestone
 
 ## Known limits and gotchas
 
-- **Cap**: 4500 repos. If you have more, do it again (run it twice, who cares?) Github had some sort of ratelimit like 5k requestions every hour.
-- **`repo_id`** sent to GitLab has to be the numeric GitHub repo id, which the app handles for you.
-- **Target namespace** has to already exist on GitLab. Your username always does; for groups, create them on GitLab first.
-- **Same-name collisions** get caught up front. The row is tagged "exists in gitlab" with a hover tooltip and disabled. Delete the existing GitLab project first if you want to re-import.
-- GitLab queues imports server-side. The UI fires them in batches of 10 with a 1.5s gap so it doesn't swamp the queue.
-- Status polling uses exponential backoff starting at 5s, capped at 60s.
+* **Cap**: 4500 repos. If you have more, do it again (run it twice, who cares?) Github had some sort of ratelimit like 5k requestions every hour.
+* **`repo\_id`** sent to GitLab has to be the numeric GitHub repo id, which the app handles for you.
+* **Target namespace** has to already exist on GitLab. Your username always does; for groups, create them on GitLab first.
+* **Same-name collisions** get caught up front. The row is tagged "exists in gitlab" with a hover tooltip and disabled. Delete the existing GitLab project first if you want to re-import.
+* GitLab queues imports server-side. The UI fires them in batches of 10 with a 1.5s gap so it doesn't swamp the queue.
+* Status polling uses exponential backoff starting at 5s, capped at 60s.
 
 ## Layout
 
@@ -113,5 +117,7 @@ src/migrate/Ui.scala     Laminar views
 
 
 
----
+\---
+
 made with ❤ by [abh80](https://github.com/abh80)
+
