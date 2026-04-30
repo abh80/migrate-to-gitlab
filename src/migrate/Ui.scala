@@ -14,10 +14,30 @@ object Ui:
       footer
     )
 
+  private def footer: HtmlElement =
+    div(
+      cls := "footer",
+      "made with ",
+      span(cls := "heart", "❤"),
+      " by ",
+      a(
+        href := "https://github.com/abh80",
+        target := "_blank",
+        rel := "noopener",
+        "abh80"
+      )
+    )
+
+  // ---------- topbar ----------
+
   private def topbar: HtmlElement =
     div(
       cls := "topbar",
-      div(cls := "brand", "migrate-to-gitlab")
+      div(cls := "brand", "migrate-to-gitlab"),
+      child <-- ghUser.signal.map {
+        case Some(u) => div(cls := "tiny", s"gh: $u")
+        case None => emptyNode
+      }
     )
 
   private val stepDefs: Vector[(String, Set[Stage])] = Vector(
@@ -26,6 +46,18 @@ object Ui:
     "Repos" -> Set[Stage](Stage.LoadingRepos, Stage.Selecting),
     "Import" -> Set[Stage](Stage.Importing, Stage.Done)
   )
+
+  // ---------- routing ----------
+
+  private def stageView(s: Stage): HtmlElement = s match
+    case Stage.LinkGithub => linkGithubPage
+    case Stage.LinkGitlab => linkGitlabPage
+    case Stage.LoadingRepos => loadingPage
+    case Stage.Selecting => selectorPage
+    case Stage.Importing => importingPage
+    case Stage.Done => donePage
+
+  // ---------- step indicator ----------
 
   private def stepIndicator(s: Stage): HtmlElement =
     val currentIdx = stepDefs.indexWhere(_._2.contains(s))
@@ -55,17 +87,11 @@ object Ui:
       )
     )
 
-  private def stageView(s: Stage): HtmlElement = s match
-    case Stage.LinkGithub => linkGithubPage
-    case Stage.LinkGitlab => linkGitlabPage
-    case Stage.LoadingRepos => loadingPage
-    case Stage.Selecting => selectorPage
-    case other =>
-      div(cls := "page", div(cls := "page-narrow", stepIndicator(other), p(cls := "muted", other.toString)))
+  // ---------- link pages ----------
 
   private def linkGithubPage: HtmlElement =
     div(
-      cls := "page",
+      cls := "page stage-enter",
       div(
         cls := "page-narrow",
         stepIndicator(Stage.LinkGithub),
@@ -102,6 +128,7 @@ object Ui:
           div(
             display := "flex",
             justifyContent := "flex-end",
+            gap := "8px",
             button(
               cls := "btn",
               disabled <-- ghVerifying.signal,
@@ -122,7 +149,7 @@ object Ui:
 
   private def linkGitlabPage: HtmlElement =
     div(
-      cls := "page",
+      cls := "page stage-enter",
       div(
         cls := "page-narrow",
         stepIndicator(Stage.LinkGitlab),
@@ -195,9 +222,11 @@ object Ui:
       )
     )
 
+  // ---------- loading ----------
+
   private def loadingPage: HtmlElement =
     div(
-      cls := "page",
+      cls := "page stage-enter",
       div(
         cls := "page-narrow",
         stepIndicator(Stage.LoadingRepos),
@@ -226,6 +255,8 @@ object Ui:
       )
     )
 
+  // ---------- selector ----------
+
   private def selectorPage: HtmlElement =
     val filtered = repos.signal.combineWith(filter.signal).map(Logic.filteredRepos.tupled)
     val visible = filtered.combineWith(pageIndex.signal).map { (f, p) =>
@@ -236,7 +267,7 @@ object Ui:
     }
 
     div(
-      cls := "page",
+      cls := "page stage-enter",
       div(
         cls := "page-wide",
         stepIndicator(Stage.Selecting),
@@ -247,7 +278,8 @@ object Ui:
           marginBottom := "12px",
           h1(cls := "h1", "Select repositories"),
           child <-- reposCapped.signal.map {
-            case true => span(cls := "pill err", div(cls := "dot"), s"capped at ${Api.MaxRepos}")
+            case true =>
+              span(cls := "pill err", div(cls := "dot"), s"capped at ${Api.MaxRepos}")
             case false => emptyNode
           }
         ),
@@ -265,7 +297,8 @@ object Ui:
       div(
         cls := "cbox",
         cls("checked") <-- visible.combineWith(selected.signal).map {
-          case (vis, _, _, _, s) => vis.nonEmpty && vis.forall(r => s.contains(r.id))
+          case (vis, _, _, _, s) =>
+            vis.nonEmpty && vis.forall(r => s.contains(r.id))
         },
         cls("indet") <-- visible.combineWith(selected.signal).map {
           case (vis, _, _, _, s) =>
@@ -292,15 +325,18 @@ object Ui:
       div(
         cls := "tiny tabular",
         child.text <-- selected.signal.combineWith(repos.signal).map { (s, rs) =>
-          s"${s.size} selected • ${rs.size} total"
+          val total = rs.size
+          val sel = s.size
+          s"$sel selected • $total total"
         }
       ),
       button(
         cls := "btn ghost sm",
         "Select all (filtered)",
         onClick --> { _ =>
+          val f = repos.now()
           val q = filter.now()
-          val ids = Logic.filteredRepos(repos.now(), q).map(_.id).toSet
+          val ids = Logic.filteredRepos(f, q).map(_.id).toSet
           selected.update(_ ++ ids)
         }
       ),
@@ -402,11 +438,104 @@ object Ui:
       )
     )
 
-  private def footer: HtmlElement =
+  // ---------- importing ----------
+
+  private def importingPage: HtmlElement =
     div(
-      cls := "footer",
-      "made with ",
-      span(cls := "heart", "❤"),
-      " by ",
-      a(href := "https://github.com/abh80", target := "_blank", rel := "noopener", "abh80")
+      cls := "page stage-enter",
+      div(
+        cls := "page-wide",
+        stepIndicator(Stage.Importing),
+        h1(cls := "h1", "Importing"),
+        p(
+          cls := "muted",
+          child.text <-- jobs.signal.map { js =>
+            val done = js.values.count {
+              case ImportJob(_, ImportPhase.Finished, _) => true
+              case _ => false
+            }
+            val failed = js.values.count {
+              case ImportJob(_, ImportPhase.Failed(_), _) => true
+              case _ => false
+            }
+            s"${js.size} total • $done finished • $failed failed"
+          }
+        ),
+        div(
+          cls := "progress-list",
+          marginTop := "16px",
+          children <-- jobs.signal.map { js =>
+            js.values.toVector
+              .sortBy(_.repo.fullName)
+              .map(progressRow)
+          }
+        )
+      )
+    )
+
+  private def progressRow(j: ImportJob): HtmlElement =
+    div(
+      cls := "progress-row",
+      div(
+        div(cls := "name", j.repo.fullName),
+        j.gitlabPath match
+          case Some(p) =>
+            div(cls := "tiny", a(href := s"https://gitlab.com/$p", target := "_blank", s"gitlab.com/$p"))
+          case None => emptyNode
+      ),
+      phaseBadge(j.phase),
+      span(cls := "tiny tabular", j.repo.updatedAt.take(10))
+    )
+
+  private def phaseBadge(p: ImportPhase): HtmlElement = p match
+    case ImportPhase.Pending => span(cls := "pill", div(cls := "dot"), "queued")
+    case ImportPhase.Started => span(cls := "pill run", div(cls := "spinner"), "importing")
+    case ImportPhase.Finished => span(cls := "pill ok", div(cls := "dot"), "finished")
+    case ImportPhase.Failed(reason) =>
+      span(cls := "pill err", title := reason, div(cls := "dot"), "failed")
+
+  // ---------- done ----------
+
+  private def donePage: HtmlElement =
+    div(
+      cls := "page stage-enter",
+      div(
+        cls := "page-narrow",
+        stepIndicator(Stage.Done),
+        div(
+          cls := "card",
+          h1(cls := "h1", "Done"),
+          p(
+            cls := "muted",
+            child.text <-- jobs.signal.map { js =>
+              val ok = js.values.count {
+                case ImportJob(_, ImportPhase.Finished, _) => true; case _ => false
+              }
+              val bad = js.values.count {
+                case ImportJob(_, ImportPhase.Failed(_), _) => true; case _ => false
+              }
+              s"$ok succeeded, $bad failed."
+            }
+          ),
+          div(
+            display := "flex",
+            gap := "8px",
+            marginTop := "16px",
+            button(
+              cls := "btn ghost",
+              "Migrate more",
+              onClick --> { _ =>
+                selected.set(Set.empty)
+                jobs.set(Map.empty)
+                stage.set(Stage.Selecting)
+              }
+            ),
+            button(
+              cls := "btn",
+              "Open GitLab",
+              onClick --> (_ => dom.window.open(s"https://gitlab.com/${glNamespace.now()}", "_blank"))
+            )
+          )
+        )
+      )
     )
