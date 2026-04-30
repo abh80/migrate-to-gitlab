@@ -1,7 +1,8 @@
 package migrate
 
 import com.raquo.laminar.api.L.*
-import scala.concurrent.ExecutionContext
+import org.scalajs.dom
+import scala.concurrent.{ExecutionContext, Future}
 import scala.scalajs.js
 import scala.util.{Failure, Success}
 
@@ -99,7 +100,55 @@ object Logic:
     val allSelected = ids.nonEmpty && ids.subsetOf(s)
     selected.set(if allSelected then s -- ids else s ++ ids)
 
-  def beginImport(): Unit = stage.set(Stage.Importing)
+  def beginImport(): Unit =
+    val chosen = repos.now().filter(r => selected.now().contains(r.id))
+    if chosen.isEmpty then return
+    jobs.set(chosen.map(r => r.id -> ImportJob(r, ImportPhase.Pending, None)).toMap)
+    stage.set(Stage.Importing)
+    val batches = chosen.grouped(10).toVector
+    runBatches(batches, 0)
+
+  private def runBatches(batches: Vector[Vector[GhRepo]], idx: Int): Unit =
+    if idx >= batches.size then
+      checkAllDone()
+      return
+    val batch = batches(idx)
+    val futs = batch.map(triggerOne)
+    Future.sequence(futs).foreach { _ =>
+      dom.window.setTimeout(() => runBatches(batches, idx + 1), 1500)
+    }
+
+  private def triggerOne(repo: GhRepo): Future[Unit] =
+    updateJob(repo.id, _.copy(phase = ImportPhase.Started))
+    Api
+      .glImport(
+        glToken.now(),
+        ghToken.now(),
+        repo.id,
+        glNamespace.now().trim,
+        repo.name
+      )
+      .map { resp =>
+        val path = resp.obj.get("full_path").map(_.str)
+        updateJob(repo.id, j => j.copy(gitlabPath = path))
+        ()
+      }
+      .recover { case e: Throwable =>
+        updateJob(repo.id, _.copy(phase = ImportPhase.Failed(humanize(e))))
+        ()
+      }
+
+  private def updateJob(id: Long, f: ImportJob => ImportJob): Unit =
+    jobs.update(m => m.get(id).fold(m)(j => m.updated(id, f(j))))
+
+  private def checkAllDone(): Unit =
+    val all = jobs.now().values
+    val done = all.forall {
+      case ImportJob(_, ImportPhase.Finished, _) => true
+      case ImportJob(_, ImportPhase.Failed(_), _) => true
+      case _ => false
+    }
+    if done && all.nonEmpty then stage.set(Stage.Done)
 
   private def humanize(t: Throwable): String =
     t match
