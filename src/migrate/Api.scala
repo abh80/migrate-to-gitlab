@@ -100,17 +100,24 @@ object Api:
       body = Some(ujson.write(body))
     ).map { case (j, _) => j }
 
-  def glProjectExists(token: String, namespacePath: String): Future[Boolean] =
-    val encoded = js.URIUtils.encodeURIComponent(namespacePath)
-    val init = new dom.RequestInit {}
-    init.method = dom.HttpMethod.GET
-    val h = new dom.Headers()
-    glHeaders(token).foreach((k, v) => h.append(k, v))
-    init.headers = h
-    dom.fetch(s"$GlBase/projects/$encoded", init).toFuture.map { resp =>
-      if resp.ok then true
-      else if resp.status == 404 then false
-      else throw ApiError(resp.status, s"gitlab status ${resp.status}")
+/** List all project paths under a namespace (user or group), paginated.
+    * Tries `/users/:ns/projects` first; on 404 falls back to `/groups/:ns/projects`.
+    * Returns the set of project `path` values (case-insensitive lower-cased).
+    */
+  def glListNamespaceProjects(token: String, namespace: String): Future[Set[String]] =
+    val encoded = js.URIUtils.encodeURIComponent(namespace)
+    def page(prefix: String, n: Int, acc: Set[String]): Future[Set[String]] =
+      req(
+        s"$GlBase/$prefix/$encoded/projects?per_page=100&page=$n&simple=true",
+        glHeaders(token)
+      ).flatMap { case (j, _) =>
+        val batch = j.arr.toVector.flatMap(p => p.obj.get("path").map(_.str.toLowerCase))
+        val merged = acc ++ batch
+        if batch.size < 100 then Future.successful(merged)
+        else page(prefix, n + 1, merged)
+      }
+    page("users", 1, Set.empty).recoverWith {
+      case e: ApiError if e.status == 404 => page("groups", 1, Set.empty)
     }
 
   def glProjectStatus(glToken: String, projectId: Long): Future[(String, Option[String])] =

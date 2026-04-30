@@ -218,20 +218,17 @@ object Logic:
     existing.set(Set.empty)
     collisionsChecked.set(0)
     collisionsTotal.set(all.size)
-    val concurrency = 6
-    val queue = scala.collection.mutable.Queue.from(all)
-    def worker(): Unit =
-      if queue.isEmpty then return
-      val r = queue.dequeue()
-      Api
-        .glProjectExists(glToken.now(), s"$ns/${r.name}")
-        .recover { case _ => false }
-        .foreach { exists =>
-          if exists then existing.update(_ + r.id)
-          collisionsChecked.update(_ + 1)
-          worker()
-        }
-    (1 to math.min(concurrency, all.size)).foreach(_ => worker())
+    Api.glListNamespaceProjects(glToken.now(), ns).onComplete {
+      case Success(paths) =>
+        val lowered = paths
+        val hits = all.collect {
+          case r if lowered.contains(r.name.toLowerCase) => r.id
+        }.toSet
+        existing.set(hits)
+        collisionsChecked.set(all.size)
+      case Failure(_) =>
+        collisionsChecked.set(all.size)
+    }
 
   // ---------- Selection ----------
 
